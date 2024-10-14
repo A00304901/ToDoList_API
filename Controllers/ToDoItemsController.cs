@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TodoListAPI.Data;
+using TodoListAPI.Models;
 using System.Collections.Generic;
 using System.Linq;
-using TodoListAPI.Models;
+using System.Threading.Tasks;
 
 namespace TodoListAPI.Controllers
 {
@@ -9,50 +12,94 @@ namespace TodoListAPI.Controllers
     [ApiController]
     public class ToDoItemsController : ControllerBase
     {
-        private static List<ToDoItem> _toDoItems = new List<ToDoItem>();
-        private static int _nextId = 1;
+        private readonly DataContext _context;
 
+        public ToDoItemsController(DataContext context)
+        {
+            _context = context;
+        }
+
+        // GET: api/todoitems
         [HttpGet]
-        public ActionResult<List<ToDoItem>> Get()
+        public async Task<ActionResult<IEnumerable<ToDoItem>>> GetToDoItems()
         {
-            return _toDoItems;
+            var toDoItems = await _context.ToDoItems
+                .Where(item => item.CompletedDate == null)
+                .ToListAsync();
+
+            return Ok(toDoItems);
         }
 
+        // GET: api/todoitems/{id}
         [HttpGet("{id}")]
-        public ActionResult<ToDoItem> Get(int id)
+        public async Task<ActionResult<ToDoItem>> GetToDoItem(int id)
         {
-            var item = _toDoItems.FirstOrDefault(i => i.Id == id);
-            if (item == null) return NotFound();
-            return item;
+            var toDoItem = await _context.ToDoItems.FindAsync(id);
+
+            if (toDoItem == null)
+            {
+                return NotFound(); // Return 404 if not found
+            }
+
+            return Ok(toDoItem); // Return the found ToDoItem
         }
 
+        // POST: api/todoitems
         [HttpPost]
-        public ActionResult<ToDoItem> Post(ToDoItem item)
+        public async Task<ActionResult<ToDoItem>> CreateToDoItem(ToDoItem toDoItem)
         {
-            item.Id = _nextId++;
-            _toDoItems.Add(item);
-            return CreatedAtAction(nameof(Get), new { id = item.Id }, item);
+            if (toDoItem == null)
+            {
+                return BadRequest("ToDoItem cannot be null.");
+            }
+
+            _context.ToDoItems.Add(toDoItem);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetToDoItem), new { id = toDoItem.Id }, toDoItem);
         }
 
+        // PUT: api/todoitems/{id}
         [HttpPut("{id}")]
-        public ActionResult Put(int id, ToDoItem updatedItem)
+        public async Task<ActionResult<ToDoItem>> UpdateToDoItem(int id, ToDoItem toDoItem)
         {
-            var item = _toDoItems.FirstOrDefault(i => i.Id == id);
-            if (item == null) return NotFound();
-            item.Title = updatedItem.Title;
-            item.Description = updatedItem.Description;
-            item.IsCompleted = updatedItem.IsCompleted;
-            item.DueDate = updatedItem.DueDate;
-            return NoContent();
+            if (toDoItem == null)
+            {
+                return BadRequest("ToDoItem cannot be null.");
+            }
+
+            // Find the existing ToDoItem
+            var existingToDoItem = await _context.ToDoItems.FindAsync(id);
+            if (existingToDoItem == null)
+            {
+                return NotFound(); // Return 404 if not found
+            }
+
+            // Update the CompletedDate to the current datetime
+            existingToDoItem.CompletedDate = DateTime.UtcNow; // or DateTime.Now based on your preference
+
+            // Save changes to the database
+            await _context.SaveChangesAsync();
+
+            return Ok(existingToDoItem); // Return the updated ToDoItem
         }
 
+        // DELETE: api/todoitems/{id}
         [HttpDelete("{id}")]
-        public ActionResult Delete(int id)
+        public async Task<IActionResult> DeleteToDoItem(int id)
         {
-            var item = _toDoItems.FirstOrDefault(i => i.Id == id);
-            if (item == null) return NotFound();
-            _toDoItems.Remove(item);
-            return NoContent();
+            // Find the existing ToDoItem
+            var toDoItem = await _context.ToDoItems.FindAsync(id);
+            if (toDoItem == null)
+            {
+                return NotFound(); // Return 404 if not found
+            }
+
+            // Remove the ToDoItem from the context
+            _context.ToDoItems.Remove(toDoItem);
+            await _context.SaveChangesAsync();
+
+            return NoContent(); // Return 204 No Content on successful deletion
         }
     }
 }
